@@ -165,6 +165,7 @@ void Tensor::debug() const {
 }
 
 bool Tensor::isContiguous() const {
+    // 就是检查stride是否符合连续存储的要求。连续存储的张量，其stride应该是从最后一个维度开始，依次乘以前一个维度的大小。
     if (_meta.shape.empty()) {
         return true;
     }
@@ -183,6 +184,7 @@ bool Tensor::isContiguous() const {
 }
 
 tensor_t Tensor::permute(const std::vector<size_t> &order) const {
+    // 只需要重新排列shape和strides即可，不需要移动数据。
     CHECK_ARGUMENT(order.size() == _meta.shape.size(), "permute: order size mismatch");
     std::vector<size_t> new_shape(order.size());
     std::vector<ptrdiff_t> new_strides(order.size());
@@ -199,6 +201,7 @@ tensor_t Tensor::permute(const std::vector<size_t> &order) const {
 }
 
 tensor_t Tensor::view(const std::vector<size_t> &shape) const {
+    // 重新计算strides就可以了，但要确保元素数量不变且tensor是连续的。
     size_t total_elems = std::accumulate(shape.begin(), shape.end(), size_t(1), std::multiplies<size_t>());
     CHECK_ARGUMENT(total_elems == this->numel(), "view: number of elements mismatch");
     CHECK_ARGUMENT(this->isContiguous(), "view: tensor is not contiguous");
@@ -215,6 +218,7 @@ tensor_t Tensor::view(const std::vector<size_t> &shape) const {
 }
 
 tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
+
     CHECK_ARGUMENT(dim < _meta.shape.size(), "slice: dim out of range");
     CHECK_ARGUMENT(start <= end && end <= _meta.shape[dim], "slice: invalid range");
 
