@@ -1,7 +1,41 @@
 #include "op.hpp"
 
+#include "../../core/llaisys_core.hpp"
+#include "../../utils.hpp"
+
+#include "cpu/rms_norm_cpu.hpp"
+
 namespace llaisys::ops {
 void rms_norm(tensor_t out, tensor_t in, tensor_t weight, float eps) {
-    TO_BE_IMPLEMENTED();
+    CHECK_SAME_DEVICE(out, in, weight);
+    CHECK_ARGUMENT(in->ndim() == 2, "rms_norm: in must be 2D");
+    CHECK_ARGUMENT(out->ndim() == 2, "rms_norm: out must be 2D");
+    CHECK_ARGUMENT(weight->ndim() == 1, "rms_norm: weight must be 1D");
+    CHECK_SAME_SHAPE(out->shape(), in->shape());
+    CHECK_ARGUMENT(weight->shape()[0] == in->shape()[1], "rms_norm: weight size must match input last dimension");
+    CHECK_ARGUMENT(out->dtype() == in->dtype() && out->dtype() == weight->dtype(), "rms_norm: dtype mismatch");
+    ASSERT(out->isContiguous() && in->isContiguous() && weight->isContiguous(),
+           "RMSNorm: all tensors must be contiguous.");
+
+    size_t rows = in->shape()[0];
+    size_t cols = in->shape()[1];
+
+    if (out->deviceType() == LLAISYS_DEVICE_CPU) {
+        return cpu::rms_norm(out->data(), in->data(), weight->data(), rows, cols, out->dtype(), eps);
+    }
+
+    llaisys::core::context().setDevice(out->deviceType(), out->deviceId());
+
+    switch (out->deviceType()) {
+    case LLAISYS_DEVICE_CPU:
+        return cpu::rms_norm(out->data(), in->data(), weight->data(), rows, cols, out->dtype(), eps);
+#ifdef ENABLE_NVIDIA_API
+    case LLAISYS_DEVICE_NVIDIA:
+        TO_BE_IMPLEMENTED();
+        return;
+#endif
+    default:
+        EXCEPTION_UNSUPPORTED_DEVICE;
+    }
 }
 } // namespace llaisys::ops
