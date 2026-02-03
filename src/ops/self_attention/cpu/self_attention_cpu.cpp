@@ -107,7 +107,13 @@ void self_attention_(T *attn_val, const T *q, const T *k, const T *v, size_t q_l
             T *output = attn_val + (i * n_heads + h) * head_dim;
 
             // output = sum_j(weights[j] * v[j])
-            std::fill(output, output + head_dim, T(0));
+            for (size_t d = 0; d < head_dim; ++d) {
+                if constexpr (std::is_same_v<T, llaisys::bf16_t> || std::is_same_v<T, llaisys::fp16_t>) {
+                    output[d] = llaisys::utils::cast<T>(0.0f);
+                } else {
+                    output[d] = T(0);
+                }
+            }
 
             for (size_t j = 0; j < kv_len; ++j) {
                 if (weights[j] > 0.0f) {
