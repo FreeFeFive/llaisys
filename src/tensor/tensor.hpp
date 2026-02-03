@@ -6,10 +6,11 @@ namespace llaisys {
 class Tensor;
 using tensor_t = std::shared_ptr<Tensor>;
 
+// 张量元数据结构体
 struct TensorMeta {
-    llaisysDataType_t dtype;
-    std::vector<size_t> shape;
-    std::vector<ptrdiff_t> strides;
+    llaisysDataType_t dtype;        // 本质上是一个枚举，从0到19，共20种数据类型
+    std::vector<size_t> shape;      // 张量的形状，每个维度的大小
+    std::vector<ptrdiff_t> strides; // 张量的步幅，用于计算内存地址
 };
 
 class Tensor {

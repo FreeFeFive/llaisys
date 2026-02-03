@@ -15,6 +15,7 @@ tensor_t Tensor::create(const std::vector<size_t> &shape,
                         llaisysDataType_t dtype,
                         llaisysDeviceType_t device_type,
                         int device) {
+    // 创建一个新的张量
     size_t ndim_ = shape.size();
     std::vector<ptrdiff_t> strides(ndim_);
     size_t stride = 1;
@@ -164,27 +165,82 @@ void Tensor::debug() const {
 }
 
 bool Tensor::isContiguous() const {
-    TO_BE_IMPLEMENTED();
+    if (_meta.shape.empty()) {
+        return true;
+    }
+    ptrdiff_t expected_stride = 1;
+    for (size_t i = _meta.shape.size(); i > 0; --i) {
+        size_t dim = i - 1;
+        if (_meta.shape[dim] == 1) {
+            continue;
+        }
+        if (_meta.strides[dim] != expected_stride) {
+            return false;
+        }
+        expected_stride *= static_cast<ptrdiff_t>(_meta.shape[dim]);
+    }
     return true;
 }
 
 tensor_t Tensor::permute(const std::vector<size_t> &order) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    CHECK_ARGUMENT(order.size() == _meta.shape.size(), "permute: order size mismatch");
+    std::vector<size_t> new_shape(order.size());
+    std::vector<ptrdiff_t> new_strides(order.size());
+    std::vector<bool> seen(order.size(), false);
+    for (size_t i = 0; i < order.size(); ++i) {
+        CHECK_ARGUMENT(order[i] < _meta.shape.size(), "permute: index out of range");
+        CHECK_ARGUMENT(!seen[order[i]], "permute: duplicate dimension");
+        seen[order[i]] = true;
+        new_shape[i] = _meta.shape[order[i]];
+        new_strides[i] = _meta.strides[order[i]];
+    }
+    TensorMeta meta{_meta.dtype, std::move(new_shape), std::move(new_strides)};
+    return std::shared_ptr<Tensor>(new Tensor(std::move(meta), _storage, _offset));
 }
 
 tensor_t Tensor::view(const std::vector<size_t> &shape) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    size_t total_elems = std::accumulate(shape.begin(), shape.end(), size_t(1), std::multiplies<size_t>());
+    CHECK_ARGUMENT(total_elems == this->numel(), "view: number of elements mismatch");
+    CHECK_ARGUMENT(this->isContiguous(), "view: tensor is not contiguous");
+
+    std::vector<ptrdiff_t> new_strides(shape.size());
+    ptrdiff_t stride = 1;
+    for (size_t i = shape.size(); i > 0; --i) {
+        size_t dim = i - 1;
+        new_strides[dim] = stride;
+        stride *= static_cast<ptrdiff_t>(shape[dim]);
+    }
+    TensorMeta meta{_meta.dtype, shape, std::move(new_strides)};
+    return std::shared_ptr<Tensor>(new Tensor(std::move(meta), _storage, _offset));
 }
 
 tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    CHECK_ARGUMENT(dim < _meta.shape.size(), "slice: dim out of range");
+    CHECK_ARGUMENT(start <= end && end <= _meta.shape[dim], "slice: invalid range");
+
+    std::vector<size_t> new_shape = _meta.shape;
+    new_shape[dim] = end - start;
+    TensorMeta meta{_meta.dtype, std::move(new_shape), _meta.strides};
+
+    size_t new_offset = _offset + start * static_cast<size_t>(_meta.strides[dim]) * this->elementSize();
+    return std::shared_ptr<Tensor>(new Tensor(std::move(meta), _storage, new_offset));
 }
 
 void Tensor::load(const void *src_) {
-    TO_BE_IMPLEMENTED();
+    // 这是一个成员函数。我们已知tensor的存储位置和元数据，现在告诉源头地址，把数据拷贝过来。
+    core::context().setDevice(this->deviceType(), this->deviceId()); // 设置当前设备。其中context()函数返回当前上下文对象的引用。
+    const std::byte *src = static_cast<const std::byte *>(src_);
+    size_t size = this->numel() * this->elementSize();
+
+    if (this->deviceType() == LLAISYS_DEVICE_CPU) { // 如果目标设备是CPU，直接使用std::memcpy进行内存拷贝。
+        std::memcpy(this->data(), src, size);
+    } else { // 否则，使用运行时API的memcpy_sync函数进行设备间内存拷贝。
+        core::context().runtime().api()->memcpy_sync(
+            this->data(),
+            src,
+            size,
+            LLAISYS_MEMCPY_H2D);
+    }
 }
 
 tensor_t Tensor::contiguous() const {
